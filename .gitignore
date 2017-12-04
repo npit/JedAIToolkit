@@ -1,0 +1,5 @@
+jedai-core/target/
+*.iml
+.idea/
+jedai-core/target/*
+db.sql.gz

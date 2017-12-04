@@ -17,6 +17,7 @@
 package EntityMatching;
 
 import BlockBuilding.*;
+import DataModel.IdDuplicates;
 import Utilities.DataStructures.AbstractDuplicatePropagation;
 import BlockProcessing.IBlockProcessing;
 import Utilities.DataStructures.UnilateralDuplicatePropagation;
@@ -31,6 +32,7 @@ import Utilities.Enumerations.BlockBuildingMethod;
 import Utilities.Enumerations.RepresentationModel;
 import Utilities.Enumerations.SimilarityMetric;
 import java.util.List;
+import java.util.Set;
 
 /**
  *
@@ -39,15 +41,17 @@ import java.util.List;
 
 public class TestAllMethods {
     public static void main(String[] args) {
-        String entitiesFilePath = "C:\\Users\\G.A.P. II\\Downloads\\cddbProfiles";
-        String groundTruthFilePath = "C:\\Users\\G.A.P. II\\Downloads\\cddbDuplicates";
+        String entitiesFilePath =    "/home/nik/work/iit/entity-linking/JedAIToolkit/datasets/cleanCleanERfiles/dblpProfiles";
+        String groundTruthFilePath = "/home/nik/work/iit/entity-linking/JedAIToolkit/datasets/cleanCleanERfiles/dblpScholarIdDuplicates";
         
         IEntityReader eReader = new EntitySerializationReader(entitiesFilePath);
         List<EntityProfile> profiles = eReader.getEntityProfiles();
         System.out.println("Input Entity Profiles\t:\t" + profiles.size());
-        
+
         IGroundTruthReader gtReader = new GtSerializationReader(groundTruthFilePath);
-        final AbstractDuplicatePropagation duplicatePropagation = new UnilateralDuplicatePropagation(gtReader.getDuplicatePairs(eReader.getEntityProfiles()));
+        Set<IdDuplicates> sid = gtReader.getDuplicatePairs(eReader.getEntityProfiles());
+        final AbstractDuplicatePropagation duplicatePropagation = new UnilateralDuplicatePropagation(
+                gtReader.getDuplicatePairs(eReader.getEntityProfiles()));
         System.out.println("Existing Duplicates\t:\t" + duplicatePropagation.getDuplicates().size());
         
         for (BlockBuildingMethod blbuMethod : BlockBuildingMethod.values()) {
