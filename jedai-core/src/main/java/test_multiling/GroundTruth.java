@@ -1,7 +1,7 @@
-import DataModel.Attribute;
+package test_multiling;
+
 import DataModel.EntityProfile;
 
-import javax.swing.text.html.parser.Entity;
 import java.util.*;
 
 public class GroundTruth {
@@ -87,14 +87,26 @@ public class GroundTruth {
         gt.get(topic_id).f2.add(sum.getEntityUrl());
     }
     public void init_topic_gt(String topic){
-        Pair<ArrayList<String>, ArrayList<String>> h = new Pair<>(new ArrayList<>(), new ArrayList<>());
+        Pair<ArrayList<String>, ArrayList<String>> h = new Pair<ArrayList<String>, ArrayList<String>>(new ArrayList<>(), new ArrayList<>());
         gt.put(topic, h);
     }
 
     public void add_cluster(List<Integer> ids1, List<Integer> ids2){
         clusters.put(refids_to_profiles(ids1), sumids_to_profiles(ids2));
     }
+    void print_sums(){
+        for(EntityProfile p : sums){
+            System.out.println(p.getEntityUrl() + " + " + test_multiling.getEntityValue(p,"topic_name") + " " + test_multiling.getEntityValue(p, "summary"));
+        }
+    }
+    void print_refs(){
+        for(EntityProfile p : refs){
+            System.out.println(p.getEntityUrl() + " + " + test_multiling.getEntityValue(p,"topic_name") + " " + test_multiling.getEntityValue(p, "ref_summary"));
+        }
+    }
     public ArrayList<Double> evaluate(){
+        print_refs();
+        print_sums();
         System.out.println("\n\n==================================\nEvaluating clustering.");
         double total_ref_prec = 0;
         double total_ref_rec = 0;
@@ -166,16 +178,25 @@ public class GroundTruth {
             for(EntityProfile s : sumsums){ System.out.print(s.getEntityUrl() + " ");} System.out.println("}");
             System.out.println(String.format("\tRecall (ref/sum/total): %f %f %f", ref_recall,sum_recall, recall));
             if(! false_refs.isEmpty())
-                System.out.println("\tfalse refs" + false_refs);
+                System.out.println("\tfalse refs " + false_refs);
             if(! false_sums.isEmpty())
-                System.out.println("\tfalse sums" + false_sums);
+                System.out.println("\tfalse sums " + false_sums);
         }
-        double total_precision = (total_ref_prec + total_sum_prec) / 2.0;
-        double total_recall = (total_ref_rec + total_sum_rec) / 2.0;
+        double total_precision = 0 ;
+        double total_recall = 0 ;
+        if(!clusters.isEmpty()) {
+            total_ref_prec /= clusters.keySet().size();
+            total_ref_rec /= clusters.keySet().size();
+            total_sum_prec /= clusters.keySet().size();
+            total_sum_rec /= clusters.keySet().size();
+            total_precision = (total_ref_prec + total_sum_prec) / 2.0;
+            total_recall = (total_ref_rec + total_sum_rec) / (2.0 * clusters.keySet().size());
+        }
         System.out.println();
         System.out.println(String.format("Total Precision (ref/sum/total): %f %f %f", total_ref_prec, total_sum_prec, total_precision));
         System.out.println(String.format("Total Recall (ref/sum/total): %f %f %f", total_ref_rec, total_sum_rec, total_recall));
         ArrayList<Double> res = new ArrayList<>();
+        res.add(total_precision); res.add(total_recall);
         res.add(total_ref_prec); res.add(total_sum_prec);
         res.add(total_ref_rec); res.add(total_ref_rec);
         return res;
@@ -214,7 +235,7 @@ public class GroundTruth {
                     continue;
                 }
             }
-            Pair<String,Integer> top = new Pair<>(topic_id, 1);
+            Pair<String,Integer> top = new Pair<String, Integer>(topic_id, 1);
             llist.add(top);
         }
         // sort the list

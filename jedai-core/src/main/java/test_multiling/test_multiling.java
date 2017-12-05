@@ -1,3 +1,5 @@
+package test_multiling;
+
 import BlockBuilding.StandardBlocking;
 import DataModel.*;
 import DataReader.EntityReader.EntityDBReader;
@@ -15,115 +17,6 @@ public class test_multiling {
             if (at.getName().equals(name)) return at.getValue();
         }
         return null;
-    }
-    public static List<EntityProfile> restrict_sums_mms(List<EntityProfile> sums_raw, List<EntityProfile> sums,
-                                                        List<EntityProfile> topics,
-                                                        List<EntityProfile> topics_for_lang,
-                                            GroundTruth ground_truth)
-        {
-            // in mms, read sums are
-            int sums_per_topic = sums_raw.size() / topics_for_lang.size();
-            int curr_sums_counter = 0;
-            int curr_topic_idx = 0;
-
-            for(EntityProfile p : sums_raw){
-                curr_sums_counter ++;
-                String topic_name = p.getEntityUrl();
-                String topic_id = get_topic_id(topic_name, topics);
-                if(topic_id.isEmpty()){
-                    System.err.println("Unable to find topic id for name " + topic_name);
-                    return null;
-                }
-                if (! topics_for_lang.contains(topic_id)) continue;
-                Set<Attribute> attrs = p.getAttributes();
-                for(Attribute attr : attrs){
-                    if (attr.getName().equals("topic_id")){
-                        String topic = attr.getValue();
-                        //topic = get_topic_name(topic,topics);
-                        // keep just the summary
-                        String sum_id = p.getEntityUrl();
-                        EntityProfile pp = new EntityProfile(sum_id);
-
-                        /*
-                        // add to ground truth, for that topic
-                        for(HashMap<String,String> topic_idname : ground_truth.get(topic).keySet()){
-                            ground_truth.get(topic).get(refids).add(sum_id);
-                        }
-                        */
-                        // get the summary text
-                        String summaryText = "";
-                        for(Attribute a : attrs){
-                            if (a.getName().equals("summary")){
-                                summaryText = a.getValue();
-                                break;
-                            }
-                        }
-                        if (summaryText.isEmpty()) {
-                            System.err.println("Failed to find summary text for " + p.toString());
-                            return null;
-                        }
-                        pp.addAttribute("summary", summaryText);
-                        sums.add(pp);
-                        break;
-                    }
-                }
-            }
-            return sums;
-    }
-    public static List<EntityProfile> restrict_sums_mss(List<EntityProfile> sums_raw, List<EntityProfile> sums,
-                                                        List<EntityProfile> topics,
-                                                        List<EntityProfile> topics_for_lang,
-                                                        GroundTruth ground_truth)
-    {
-        for(EntityProfile p : sums_raw){
-            Set<Attribute> attrs = p.getAttributes();
-            for(Attribute attr : attrs){
-                if (attr.getName().equals("topic_id")){
-                    String topic = attr.getValue();
-                    if (! topics_for_lang.contains(topic)) continue;
-                    // keep just the summary
-                    String sum_id = p.getEntityUrl();
-                    EntityProfile pp = new EntityProfile(sum_id);
-                    /*
-                    // add to ground truth, for that topic
-                    for(ArrayList<String> refids : ground_truth.get(topic).keySet()){
-                        ground_truth.get(topic).get(refids).add(sum_id);
-                    }
-                    */
-                    // get the summary text
-                    String summaryText = "";
-                    for(Attribute a : attrs){
-                        if (a.getName().equals("summary")){
-                            summaryText = a.getValue();
-                            break;
-                        }
-                    }
-                    if (summaryText.isEmpty()) {
-                        System.err.println("Failed to find summary text for " + p.toString());
-                        return null;
-                    }
-                    pp.addAttribute("summary", summaryText);
-                    sums.add(pp);
-                    break;
-                }
-            }
-        }
-        return sums;
-    }
-
-    public static String get_topic_id(String topic_name, List<EntityProfile> topics){
-        String topic_id="";
-        for(EntityProfile top : topics) {
-            for (Attribute at : top.getAttributes()) {
-                if (at.getName().equals("topic_name")) {
-                    if (at.getValue().equals(topic_name)) {
-                        return top.getEntityUrl();
-                    }
-                    //else System.out.println("[" + at.getValue() + "] does not match [" + topic_name + "]");
-                }
-            }
-        }
-        return "";
     }
     public static String get_topic_name(String topic_id, List<EntityProfile> topics){
         for(EntityProfile top : topics) {
@@ -172,7 +65,7 @@ public class test_multiling {
     }
 
     public static void read_mms(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums, GroundTruth gt, ArrayList<String> langs){
-        String mms_sources_dir = "/home/nik/work/iit/entity-linking/multilingSources/SourceTextsV2b/";
+        String mms_sources_dir = "/home/npittaras/Documents/project/entity-linking/mms_sourcetexts/SourceTextsV2b/";
 
         HashMap<String,String> langnames = new HashMap<>();
         langnames.put("en","english");
@@ -235,8 +128,9 @@ public class test_multiling {
             int topic_index = 0;
             int topic_interval = files.size() / topics_for_lang.size();
             int file_counter = 0;
+            System.out.println(String.format("Read %d mms source texts", files.size()));
             for (final File fileEntry : files) {
-                System.out.println("Reading source file " + fileEntry.getName());
+                //System.out.println("Reading source file " + fileEntry.getName());
                 try {
                     FileReader fr = new FileReader(fileEntry);
                     BufferedReader br = new BufferedReader(fr);
@@ -248,10 +142,14 @@ public class test_multiling {
                         text += line + " ";
 
                     }
-                    if (file_counter++ > topic_interval){ topic_index++; file_counter = 0;}
+                    if (file_counter++ >= topic_interval){
+                        topic_index++; file_counter = 1;
+                    }
+
                     String topic_name = getEntityValue(topics_for_lang.get(topic_index), "topic_name");
                     String topic_id = topics_for_lang.get(topic_index).getEntityUrl();
                     String source_id = fileEntry.getName().split("\\.")[0];
+                    System.out.println(String.format("Assigned sum %s to topic %s : %s", source_id, topic_id, topic_name));
                     EntityProfile ep = new EntityProfile(source_id);
                     ep.addAttribute("summary", text);
                     ep.addAttribute("topic_name", topic_name);
@@ -266,7 +164,7 @@ public class test_multiling {
                     return;
                 } catch (Exception e) {
                     e.printStackTrace();
-                    return;
+
                 }
             }
         }
@@ -275,9 +173,19 @@ public class test_multiling {
     public static void main(String[] args){
         boolean doDirty = false;
         int max_topics = 2;
-
-        // use mms or mss topics
+        double clustering_threshold = 0.1;
         String datamode = "mms";
+
+        Properties props = new Properties();
+        try {
+            props.load(new FileReader("config.txt"));
+            clustering_threshold = Double.parseDouble(props.getProperty("clustering_threshold"));
+            datamode =  props.getProperty("datamode");
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        }
+
         boolean do_mss = datamode.equals("mss");
         boolean do_mms = datamode.equals("mms");
 
@@ -346,38 +254,51 @@ public class test_multiling {
             if (sim > minSim) maxSim = sim;
         }
         System.out.println("max sim:" + maxSim + " - min sim:" + minSim);
-        double threshold = 0.1;
-        CenterClustering cl = new CenterClustering(threshold);
-        System.out.println("Clustering with a threshold of " + threshold);
+        CenterClustering cl = new CenterClustering(clustering_threshold);
+        System.out.println("Clustering with a threshold of " + clustering_threshold);
         List<EquivalenceCluster> clusters_raw = cl.getDuplicates(sp);
         System.out.println("Raw size: " + clusters_raw.size() + " clusters");
 
         int count=1;
         List<EquivalenceCluster> clusters= new ArrayList<>();
         for(EquivalenceCluster c : clusters_raw){
-            //System.out.println(count++ + "/" + clusters_raw.size() +
-                    //" | D1 size:" + c.getEntityIdsD1().size() +
-                    //" , D2 size:" + c.getEntityIdsD2().size());
+            System.out.println(count++ + "/" + clusters_raw.size() +
+                    " | D1 size:" + c.getEntityIdsD1().size() +
+                    " , D2 size:" + c.getEntityIdsD2().size());
             if(c.getEntityIdsD1().isEmpty() || c.getEntityIdsD2().isEmpty()) continue;
             clusters.add(c);
         }
-        System.out.println("Ignoring %d unit clusters: " + (clusters_raw.size() - clusters.size()));
+        System.out.println(String.format("Ignoring %d unit clusters: ",  (clusters_raw.size() - clusters.size())));
         System.out.println("Non-unit clusters: " + clusters.size());
         count=1;
+        int n_clust = 0;
         for (EquivalenceCluster c : clusters){
             System.out.println(count++ + "/" + clusters.size() + ":" + c.toString());
             System.out.println("\tE1 - sizes " + c.getEntityIdsD1());
             System.out.println("\tE2 - sizes " + c.getEntityIdsD2());
             ground_truth.add_cluster(c.getEntityIdsD1(), c.getEntityIdsD2());
+            n_clust ++;
         }
 
         ArrayList<Double> res = ground_truth.evaluate();
 
+        if (max_topics > 0){
+            System.err.println("============\nMax topics is set to " + max_topics);
+        }
         // machine readable output
         System.out.println();
-        System.out.println("rprec sprec rrec srec");
+        System.out.println("clust. threshold:" + clustering_threshold + " num. clusters " + n_clust);
+        System.out.println("thresh | prec rec | ref prec/rec | sum prec/rec");
         System.out.println("====================");
-        for(double r : res) System.out.print(r + " ");
+        System.out.print("RES: ");
+        System.out.print(clustering_threshold + " | ");
+        if(n_clust == 0) { System.out.println(); return; }
+        count =0;
+        for(double r : res) {
+            if (count % 2 == 0 && count > 0) System.out.print("| ");
+            ++count;
+            System.out.print(r + " ");
+        }
 
         System.out.println();
     }
