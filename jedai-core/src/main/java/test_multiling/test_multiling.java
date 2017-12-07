@@ -4,6 +4,7 @@ import BlockBuilding.StandardBlocking;
 import DataModel.*;
 import DataReader.EntityReader.EntityDBReader;
 import EntityClustering.CenterClustering;
+import EntityClustering.ConnectedComponentsClustering;
 import EntityMatching.ProfileMatcher;
 import Utilities.Enumerations.RepresentationModel;
 import Utilities.Enumerations.SimilarityMetric;
@@ -30,6 +31,16 @@ public class test_multiling {
         }
        return "";
     }
+
+    public static String get_topic_id(String topic_name, List<EntityProfile> topics){
+        for(EntityProfile top : topics) {
+            String topic_id = top.getEntityUrl();
+            String name = getEntityValue(top, "topic_name");
+            if(name.equals(topic_name)) return topic_id;
+        }
+        return "";
+    }
+
     public static void read_mss(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums, GroundTruth gt, ArrayList<String> langs){
         // read topics for the current lang
         EntityDBReader eReader_top = new EntityDBReader("mysql://localhost:3306/multiling2017_mss");
@@ -40,13 +51,21 @@ public class test_multiling {
 
 
         // read reference summaries
+        List<EntityProfile> refs_raw;
         EntityDBReader eReader_ref = new EntityDBReader("mysql://localhost:3306/multiling2017_mss");
         eReader_ref.setPassword("password");
         eReader_ref.setUser("root");
         eReader_ref.setTable("ref_summaries");
-        refs.addAll(eReader_ref.getEntityProfiles());
-        for(EntityProfile r : refs){
-           r.addAttribute("topic_id", r.getEntityUrl());
+        refs_raw = eReader_ref.getEntityProfiles();
+        for(EntityProfile r : refs_raw){
+            // since raw refs are assigned topic id
+            EntityProfile prof = new EntityProfile("ref_" + refs.size());
+            String topic_id = r.getEntityUrl();
+            String summ = getEntityValue(r, "ref_summary");
+            prof.addAttribute("topic_id", topic_id);
+            prof.addAttribute("summary", summ);
+            prof.addAttribute("topic_name", get_topic_name(topic_id, topics));
+            refs.add(prof);
         }
 
         // read submitted summaries
@@ -64,8 +83,7 @@ public class test_multiling {
         }
     }
 
-    public static void read_mms(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums, GroundTruth gt, ArrayList<String> langs){
-        String mms_sources_dir = "/home/npittaras/Documents/project/entity-linking/mms_sourcetexts/SourceTextsV2b/";
+    public static void read_mms(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums, String mms_sources_dir, ArrayList<String> langs){
 
         HashMap<String,String> langnames = new HashMap<>();
         langnames.put("en","english");
@@ -88,13 +106,25 @@ public class test_multiling {
 
 
         // read reference summaries
+        List<EntityProfile> refs_raw;
         EntityDBReader eReader_ref = new EntityDBReader("mysql://localhost:3306/multiling_mms");
         eReader_ref.setPassword("password");
         eReader_ref.setUser("root");
         eReader_ref.setTable("ref_summaries");
-        refs.addAll(eReader_ref.getEntityProfiles());
-        for(EntityProfile r : refs){
-            r.addAttribute("topic_id", r.getEntityUrl());
+        refs_raw = eReader_ref.getEntityProfiles();
+        for(EntityProfile r : refs_raw){
+            // since raw refs are assigned topic id
+            EntityProfile prof = new EntityProfile("ref_" + refs.size());
+
+            String summ = getEntityValue(r, "ref_summary");
+            String topic_name = r.getEntityUrl();
+            String topic_id =  get_topic_id(topic_name, topics);
+            prof.addAttribute("topic_id", topic_id);
+            prof.addAttribute("summary", summ);
+            prof.addAttribute("topic_name", get_topic_name(topic_id, topics));
+
+            prof.addAttribute("topic_id", r.getEntityUrl());
+            refs.add(prof);
         }
 
         if (langs.isEmpty()){
@@ -171,21 +201,27 @@ public class test_multiling {
     }
 
     public static void main(String[] args){
-        boolean doDirty = false;
         int max_topics = 2;
         double clustering_threshold = 0.1;
         String datamode = "mms";
 
+        boolean doDirty = true;
         Properties props = new Properties();
         try {
             props.load(new FileReader("config.txt"));
             clustering_threshold = Double.parseDouble(props.getProperty("clustering_threshold"));
             datamode =  props.getProperty("datamode");
+            doDirty = Boolean.parseBoolean(props.getProperty("dirty"));
         } catch (IOException e) {
             e.printStackTrace();
             return;
         }
 
+        System.out.print("Running ER on " + datamode);
+        if(doDirty)
+            System.out.println(" dirty ");
+        else
+            System.out.println(" clean ");
         boolean do_mss = datamode.equals("mss");
         boolean do_mms = datamode.equals("mms");
 
@@ -199,15 +235,15 @@ public class test_multiling {
         GroundTruth ground_truth = null;
 
         if(do_mms) {
-            read_mms(topics, refs_raw, sums_raw, ground_truth, langs);
+            String source_folder = props.getProperty("source_folder");
+
+            read_mms(topics, refs_raw, sums_raw, source_folder, langs);
         }
         else{
             // read participant summaries
             read_mss(topics, refs_raw, sums_raw, ground_truth, langs);
         }
 
-        List<EntityProfile> sums=new ArrayList<>();
-        List<EntityProfile> refs=new ArrayList<>();
         List<EntityProfile> topics_for_lang=new ArrayList<>();
 
         // filter data
@@ -228,19 +264,22 @@ public class test_multiling {
             ground_truth.add_sum(p);
         }
 
-        // end of filter data
+        //ground_truth.print_refs();
+        //ground_truth.print_sums();
 
+        // end of filter data
         StandardBlocking bl = new StandardBlocking();
-        SimilarityPairs sp = null;
+        SimilarityPairs sp;
         if (doDirty){
-            List<EntityProfile> aggregate = new ArrayList<>();
-            aggregate.addAll(ground_truth.get_sums());
-            aggregate.addAll(ground_truth.get_refs());
+            ground_truth.make_aggregate();
+            List<EntityProfile> aggregate = ground_truth.get_aggregate();
+            System.out.println("Clustering a total of " + aggregate.size() + " aggregate summaries");
             List<AbstractBlock> blocks =  bl.getBlocks(aggregate);
             ProfileMatcher pm = new ProfileMatcher(RepresentationModel.CHARACTER_FOURGRAM_GRAPHS, SimilarityMetric.GRAPH_VALUE_SIMILARITY);
             sp = pm.executeComparisons(blocks, aggregate);
         }
         else{
+            System.out.println("Clustering " + ground_truth.get_refs().size() + " refs and " + ground_truth.get_sums().size() + " non-ref sums.");
             List<AbstractBlock> blocks =  bl.getBlocks(ground_truth.get_refs(), ground_truth.get_sums());
             ProfileMatcher pm = new ProfileMatcher(RepresentationModel.CHARACTER_FOURGRAM_GRAPHS, SimilarityMetric.GRAPH_VALUE_SIMILARITY);
             sp = pm.executeComparisons(blocks, ground_truth.get_refs(), ground_truth.get_sums());
@@ -251,36 +290,63 @@ public class test_multiling {
         double minSim = 2;
         for(double sim : sp.getSimilarities()){
             if (sim < minSim) minSim = sim;
-            if (sim > minSim) maxSim = sim;
+            if (sim > maxSim) maxSim = sim;
         }
         System.out.println("max sim:" + maxSim + " - min sim:" + minSim);
-        CenterClustering cl = new CenterClustering(clustering_threshold);
+        ConnectedComponentsClustering cl = new ConnectedComponentsClustering();
+        cl.setSimilarityThreshold(clustering_threshold);
+        //CenterClustering cl = new CenterClustering(clustering_threshold);
         System.out.println("Clustering with a threshold of " + clustering_threshold);
         List<EquivalenceCluster> clusters_raw = cl.getDuplicates(sp);
+        if(clusters_raw.isEmpty()){
+            System.out.println("No clusters produced!");
+            return;
+        }
         System.out.println("Raw size: " + clusters_raw.size() + " clusters");
 
         int count=1;
-        List<EquivalenceCluster> clusters= new ArrayList<>();
-        for(EquivalenceCluster c : clusters_raw){
-            System.out.println(count++ + "/" + clusters_raw.size() +
-                    " | D1 size:" + c.getEntityIdsD1().size() +
-                    " , D2 size:" + c.getEntityIdsD2().size());
-            if(c.getEntityIdsD1().isEmpty() || c.getEntityIdsD2().isEmpty()) continue;
-            clusters.add(c);
-        }
-        System.out.println(String.format("Ignoring %d unit clusters: ",  (clusters_raw.size() - clusters.size())));
-        System.out.println("Non-unit clusters: " + clusters.size());
-        count=1;
         int n_clust = 0;
-        for (EquivalenceCluster c : clusters){
-            System.out.println(count++ + "/" + clusters.size() + ":" + c.toString());
-            System.out.println("\tE1 - sizes " + c.getEntityIdsD1());
-            System.out.println("\tE2 - sizes " + c.getEntityIdsD2());
-            ground_truth.add_cluster(c.getEntityIdsD1(), c.getEntityIdsD2());
-            n_clust ++;
+        List<EquivalenceCluster> clusters= new ArrayList<>();
+        if(!doDirty) {
+
+            for (EquivalenceCluster c : clusters_raw) {
+                System.out.println(count++ + "/" + clusters_raw.size() +
+                        " | D1 size:" + c.getEntityIdsD1().size() +
+                        " , D2 size:" + c.getEntityIdsD2().size());
+                if (c.getEntityIdsD1().isEmpty() || c.getEntityIdsD2().isEmpty()) continue;
+                clusters.add(c);
+            }
+            System.out.println(String.format("Ignoring %d unit clusters: ",  (clusters_raw.size() - clusters.size())));
+            System.out.println("Non-unit clusters: " + clusters.size());
+            count=1;
+
+            for (EquivalenceCluster c : clusters){
+                System.out.println(count++ + "/" + clusters.size() + ":" + c.toString());
+                System.out.println("\tE1 - sizes " + c.getEntityIdsD1());
+                System.out.println("\tE2 - sizes " + c.getEntityIdsD2());
+                ground_truth.add_cluster(c.getEntityIdsD1(), c.getEntityIdsD2());
+                n_clust ++;
+            }
+        }
+        else {
+            int ccount = 0;
+            for(EquivalenceCluster c : clusters_raw) {
+                ccount++;
+                if (c.getEntityIdsD1().size() == ground_truth.get_aggregate().size()) {
+                    System.out.println("Discarding degenerate all inclusive cluster #" + ccount);
+                    continue;
+                }
+                if (c.getEntityIdsD1().size() == 1) {
+                    System.out.println("Discarding degenerate unit cluster #" + ccount);
+                    continue;
+                }
+
+                ground_truth.add_cluster(c.getEntityIdsD1(), c.getEntityIdsD2());
+            }
         }
 
-        ArrayList<Double> res = ground_truth.evaluate();
+
+        ArrayList<Double> res = ground_truth.evaluate(doDirty);
 
         if (max_topics > 0){
             System.err.println("============\nMax topics is set to " + max_topics);
@@ -288,7 +354,8 @@ public class test_multiling {
         // machine readable output
         System.out.println();
         System.out.println("clust. threshold:" + clustering_threshold + " num. clusters " + n_clust);
-        System.out.println("thresh | prec rec | ref prec/rec | sum prec/rec");
+        if(doDirty) System.out.println("thresh | prec rec | ref prec/rec | sum prec/rec");
+        else System.out.println("thresh | prec rec ");
         System.out.println("====================");
         System.out.print("RES: ");
         System.out.print(clustering_threshold + " | ");

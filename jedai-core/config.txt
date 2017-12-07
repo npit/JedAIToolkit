@@ -1,2 +1,4 @@
-clustering_threshold = 0
+clustering_threshold = 0.9
 datamode = mms
+dirty = true
+source_folder = /home/nik/work/iit/entity-linking/multilingSources/SourceTextsV2b/
