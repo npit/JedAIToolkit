@@ -48,12 +48,13 @@ public class ConnectedComponentsClustering extends AbstractEntityClustering {
         
         // add an edge for every pair of entities with a weight higher than the thrshold
         final Iterator<Comparison> iterator = simPairs.getPairIterator();
+        int count = 0;
         while (iterator.hasNext()) {
+            count++;
             Comparison comparison = iterator.next();
+            System.out.println("IDs : " + comparison.getEntityId1() + " , " + comparison.getEntityId2() + " sim: " + comparison.getUtilityMeasure());
             if (threshold < comparison.getUtilityMeasure()) {
-                if(comparison.getEntityId1() == comparison.getEntityId2()){
-                    System.out.println("Same ids:" + comparison.getEntityId1() + " , " + comparison.getEntityId2());
-                }
+                System.out.println("Adding edge # " + count);
                 similarityGraph.addEdge(comparison.getEntityId1(), comparison.getEntityId2() + datasetLimit);
             }
         }

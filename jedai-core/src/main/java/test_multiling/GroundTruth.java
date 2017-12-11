@@ -21,6 +21,8 @@ public class GroundTruth {
         sumtype = new ArrayList<>();
         for(EntityProfile p : refs) { sumtype.add("ref"); llist.add(p); }
         for(EntityProfile p : sums) { sumtype.add("sum"); llist.add(p); }
+        System.out.println("RESTRICTING TO 3");
+        while(llist.size() > 3)llist.remove(llist.size()-1);
         refs = llist;
     }
     List<EntityProfile> get_aggregate(){
@@ -28,18 +30,21 @@ public class GroundTruth {
         int rcount = 0;
         int scount = 0;
         int count = 0;
+        System.out.println();
         for(EntityProfile p : refs){
             EntityProfile pp = new EntityProfile(p.getEntityUrl());
             String summ = test_multiling.getEntityValue(p, "summary").substring(0,100).replaceAll("\\n", "");
-            //pp.addAttribute("summary", summ);
-            if(sumtype.get(count++).equals("ref"))
-                pp.addAttribute("summary", "reference summary " + scount++);
-            else
-                pp.addAttribute("summary", "regular summary " + rcount++);
+            summ = summ.substring(0,64);
+            pp.addAttribute("summary", summ);
+            //if(sumtype.get(count++).equals("ref"))
+            //    pp.addAttribute("summary", "reference summary 12312 623497 )(&) 01!@#$%^&*(((()_+|" + scount++);
+            //else
+            //    pp.addAttribute("summary", "regular summary " + rcount++);
 
             System.out.println("ent-url: " + pp.getEntityUrl() + " summary: {" + test_multiling.getEntityValue(pp,"summary") + "}");
             llist.add(pp);
         }
+        System.out.println();
         return llist;
     }
 

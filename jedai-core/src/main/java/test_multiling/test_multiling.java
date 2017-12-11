@@ -3,8 +3,11 @@ package test_multiling;
 import BlockBuilding.StandardBlocking;
 import DataModel.*;
 import DataReader.EntityReader.EntityDBReader;
+import EntityClustering.AbstractEntityClustering;
 import EntityClustering.CenterClustering;
 import EntityClustering.ConnectedComponentsClustering;
+import EntityMatching.AbstractEntityMatching;
+import EntityMatching.GroupLinkage;
 import EntityMatching.ProfileMatcher;
 import Utilities.Enumerations.RepresentationModel;
 import Utilities.Enumerations.SimilarityMetric;
@@ -117,11 +120,11 @@ public class test_multiling {
             EntityProfile prof = new EntityProfile("ref_" + refs.size());
 
             String summ = getEntityValue(r, "ref_summary");
-            String topic_name = r.getEntityUrl();
-            String topic_id =  get_topic_id(topic_name, topics);
+            String topic_id = r.getEntityUrl();
+            String topic_name =  get_topic_name(topic_id, topics);
             prof.addAttribute("topic_id", topic_id);
             prof.addAttribute("summary", summ);
-            prof.addAttribute("topic_name", get_topic_name(topic_id, topics));
+            prof.addAttribute("topic_name", topic_name);
 
             prof.addAttribute("topic_id", r.getEntityUrl());
             refs.add(prof);
@@ -201,6 +204,7 @@ public class test_multiling {
     }
 
     public static void main(String[] args){
+        test();
         int max_topics = 2;
         double clustering_threshold = 0.1;
         String datamode = "mms";
@@ -269,19 +273,21 @@ public class test_multiling {
 
         // end of filter data
         StandardBlocking bl = new StandardBlocking();
+        AbstractEntityMatching pm = null;
         SimilarityPairs sp;
+
         if (doDirty){
             ground_truth.make_aggregate();
             List<EntityProfile> aggregate = ground_truth.get_aggregate();
             System.out.println("Clustering a total of " + aggregate.size() + " aggregate summaries");
             List<AbstractBlock> blocks =  bl.getBlocks(aggregate);
-            ProfileMatcher pm = new ProfileMatcher(RepresentationModel.CHARACTER_FOURGRAM_GRAPHS, SimilarityMetric.GRAPH_VALUE_SIMILARITY);
+            pm = getMatcher(props);
             sp = pm.executeComparisons(blocks, aggregate);
         }
         else{
             System.out.println("Clustering " + ground_truth.get_refs().size() + " refs and " + ground_truth.get_sums().size() + " non-ref sums.");
             List<AbstractBlock> blocks =  bl.getBlocks(ground_truth.get_refs(), ground_truth.get_sums());
-            ProfileMatcher pm = new ProfileMatcher(RepresentationModel.CHARACTER_FOURGRAM_GRAPHS, SimilarityMetric.GRAPH_VALUE_SIMILARITY);
+            pm = getMatcher(props);
             sp = pm.executeComparisons(blocks, ground_truth.get_refs(), ground_truth.get_sums());
         }
         // try with a single list
@@ -293,7 +299,8 @@ public class test_multiling {
             if (sim > maxSim) maxSim = sim;
         }
         System.out.println("max sim:" + maxSim + " - min sim:" + minSim);
-        ConnectedComponentsClustering cl = new ConnectedComponentsClustering();
+        AbstractEntityClustering cl = getClusterer(props);
+        cl = new ConnectedComponentsClustering();
         cl.setSimilarityThreshold(clustering_threshold);
         //CenterClustering cl = new CenterClustering(clustering_threshold);
         System.out.println("Clustering with a threshold of " + clustering_threshold);
@@ -368,5 +375,52 @@ public class test_multiling {
         }
 
         System.out.println();
+    }
+    static void test(){
+        List<EntityProfile> aggr = new ArrayList<>();
+        EntityProfile p = new EntityProfile("id_" + aggr.size());
+        p.addAttribute("sum", "Two years after the seizure of Royal Navy personnel by Iran, two");
+        aggr.add(p);
+        p = new EntityProfile("id_" + aggr.size());
+        p.addAttribute("sum","In March 2007 a British frigate with 15 Navy personnel, includin");
+        aggr.add(p);
+        p = new EntityProfile("id_" + aggr.size());
+        p.addAttribute("sum","Fifteen British Royal Navy personnel was been captured by Irania");
+        aggr.add(p);
+
+
+        for(EntityProfile e : aggr) {
+            System.out.println(e);
+        }
+        StandardBlocking bl = new StandardBlocking();
+        List<AbstractBlock> blocks =  bl.getBlocks(aggr);
+
+        ProfileMatcher pm = new ProfileMatcher(RepresentationModel.CHARACTER_FOURGRAM_GRAPHS, SimilarityMetric.GRAPH_VALUE_SIMILARITY);
+        SimilarityPairs sp = pm.executeComparisons(blocks, aggr);
+        System.out.println(sp.getSimilarities().length + " sim. pairs");
+        System.out.print("\nIDs1:");for(int id1 : sp.getEntityIds1()) System.out.print(id1 + " ");
+        System.out.print("\nIDs2:");for(int id2 : sp.getEntityIds1()) System.out.print(id2 + " "); System.out.println();
+
+        ConnectedComponentsClustering cl = new ConnectedComponentsClustering();
+        cl.setSimilarityThreshold(0.1);
+        List<EquivalenceCluster> clusters = cl.getDuplicates(sp);
+        System.out.println("Done");
+        aggr.get(3);
+    }
+
+    static AbstractEntityClustering getClusterer(Properties props){
+        String clusterer = props.getProperty("clusterer");
+        double thresh = Double.parseDouble(props.getProperty("clustering_threshold"));
+        if(clusterer.equals("center")) return new CenterClustering(thresh);
+        if(clusterer.equals("connected")) return new ConnectedComponentsClustering(thresh);
+        return null;
+    }
+    static AbstractEntityMatching getMatcher(Properties props){
+        String matcher = props.getProperty("matcher");
+        if(matcher.equals("profilematcher"))
+            return new ProfileMatcher(RepresentationModel.CHARACTER_FOURGRAM_GRAPHS, SimilarityMetric.GRAPH_VALUE_SIMILARITY);
+        else if(matcher.equals("grouplinkage"))
+            return new GroupLinkage();
+        return null;
     }
 }

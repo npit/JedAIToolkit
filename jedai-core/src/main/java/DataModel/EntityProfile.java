@@ -52,4 +52,15 @@ public class EntityProfile implements Serializable {
     public Set<Attribute> getAttributes() {
         return attributes;
     }
+
+    @Override
+    public String toString(){
+        String str = "url = " + this.entityUrl + ", attributes = {";
+        for(Attribute a : attributes){
+            str += " (" + a.getName() + " = " + a.getValue() + ")";
+        }
+        str+="}";
+
+        return str;
+    }
 }
