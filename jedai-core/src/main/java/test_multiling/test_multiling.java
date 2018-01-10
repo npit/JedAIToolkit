@@ -1,6 +1,7 @@
 package test_multiling;
 
 import BlockBuilding.StandardBlocking;
+import BlockProcessing.ComparisonRefinement.ComparisonPropagation;
 import DataModel.*;
 import DataReader.EntityReader.EntityDBReader;
 import EntityClustering.AbstractEntityClustering;
@@ -11,6 +12,11 @@ import EntityMatching.GroupLinkage;
 import EntityMatching.ProfileMatcher;
 import Utilities.Enumerations.RepresentationModel;
 import Utilities.Enumerations.SimilarityMetric;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.stream.JsonReader;
 
 import java.io.*;
 import java.util.*;
@@ -22,7 +28,7 @@ public class test_multiling {
         }
         return null;
     }
-    public static String get_topic_name(String topic_id, List<EntityProfile> topics){
+    private static String get_topic_name(String topic_id, List<EntityProfile> topics){
         for(EntityProfile top : topics) {
             if (top.getEntityUrl().equals(topic_id)) {
                 for (Attribute at : top.getAttributes()) {
@@ -35,22 +41,16 @@ public class test_multiling {
        return "";
     }
 
-    public static String get_topic_id(String topic_name, List<EntityProfile> topics){
-        for(EntityProfile top : topics) {
-            String topic_id = top.getEntityUrl();
-            String name = getEntityValue(top, "topic_name");
-            if(name.equals(topic_name)) return topic_id;
-        }
-        return "";
-    }
-
-    public static void read_mss(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums, GroundTruth gt, ArrayList<String> langs){
+    private static void read_mss(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums){
+        System.out.println("Reading MSS data (reference and participant summaries) from a mysql db");
         // read topics for the current lang
         EntityDBReader eReader_top = new EntityDBReader("mysql://localhost:3306/multiling2017_mss");
         eReader_top.setPassword("password");
         eReader_top.setUser("root");
         eReader_top.setTable("topic");
-        topics.addAll(eReader_top.getEntityProfiles());
+        List<EntityProfile> rres = eReader_top.getEntityProfiles();
+        if (rres == null) return;
+        topics.addAll(rres);
 
 
         // read reference summaries
@@ -65,7 +65,9 @@ public class test_multiling {
             EntityProfile prof = new EntityProfile("ref_" + refs.size());
             String topic_id = r.getEntityUrl();
             String summ = getEntityValue(r, "ref_summary");
+            String topic_name = get_topic_name(topic_id, topics);
             prof.addAttribute("topic_id", topic_id);
+            prof.addAttribute("topic_name", topic_name);
             prof.addAttribute("summary", summ);
             prof.addAttribute("topic_name", get_topic_name(topic_id, topics));
             refs.add(prof);
@@ -86,8 +88,9 @@ public class test_multiling {
         }
     }
 
-    public static void read_mms(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums, String mms_sources_dir, ArrayList<String> langs){
+    private static void read_mms(List<EntityProfile> topics, List<EntityProfile> refs, List<EntityProfile> sums, Properties props, ArrayList<String> langs){
 
+        System.out.println("Reading MMS data (reference summaries and source texts) from a mysql db and a local folder");
         HashMap<String,String> langnames = new HashMap<>();
         langnames.put("en","english");
         langnames.put("zh","chinese");
@@ -115,6 +118,7 @@ public class test_multiling {
         eReader_ref.setUser("root");
         eReader_ref.setTable("ref_summaries");
         refs_raw = eReader_ref.getEntityProfiles();
+
         for(EntityProfile r : refs_raw){
             // since raw refs are assigned topic id
             EntityProfile prof = new EntityProfile("ref_" + refs.size());
@@ -130,20 +134,23 @@ public class test_multiling {
             refs.add(prof);
         }
 
-        if (langs.isEmpty()){
+        String mms_sources_dir = props.getProperty("mms_sources_folder");
+        // read text sources from which reference summaries were created
+        if (langs.isEmpty()) {
             // use all available languages for sum
             File sf = new File(mms_sources_dir);
-            for(File f : sf.listFiles()){
+            for (File f : sf.listFiles()) {
                 if (f.isFile()) continue;
                 langs.add(f.getName());
             }
         }
+
         // read sources per lang
         for (String lang : langs) {
             // get topics for lang
             ArrayList<EntityProfile> topics_for_lang = new ArrayList<>();
-            for(EntityProfile p : topics){
-                if(getEntityValue(p, "lang_code").equals(lang)) topics_for_lang.add(p);
+            for (EntityProfile p : topics) {
+                if (getEntityValue(p, "lang_code").equals(lang)) topics_for_lang.add(p);
             }
             // sort per name
             Collections.sort(topics_for_lang, new Comparator<EntityProfile>() {
@@ -175,8 +182,9 @@ public class test_multiling {
                         text += line + " ";
 
                     }
-                    if (file_counter++ >= topic_interval){
-                        topic_index++; file_counter = 1;
+                    if (file_counter++ >= topic_interval) {
+                        topic_index++;
+                        file_counter = 1;
                     }
 
                     String topic_name = getEntityValue(topics_for_lang.get(topic_index), "topic_name");
@@ -187,7 +195,7 @@ public class test_multiling {
                     ep.addAttribute("summary", text);
                     ep.addAttribute("topic_name", topic_name);
                     ep.addAttribute("topic_id", topic_id);
-                    ep.addAttribute("lang",lang);
+                    ep.addAttribute("lang", lang);
                     sums.add(ep);
                 } catch (FileNotFoundException e) {
                     e.printStackTrace();
@@ -203,64 +211,244 @@ public class test_multiling {
         }
     }
 
-    public static void main(String[] args){
-        test();
-        int max_topics = 2;
-        double clustering_threshold = 0.1;
-        String datamode = "mms";
+    private static EntityProfile jsonobj_to_entityprofile(String id, JsonArray ar){
+        EntityProfile ep = new EntityProfile(id);
+        for(JsonElement el : ar){
+            JsonObject ob = (JsonObject) el;
+            for(Map.Entry<String, JsonElement> entry : ob.entrySet()){
+                ep.addAttribute(entry.getKey(), new Gson().toJson(entry.getValue()));
+            }
+        }
+        return ep;
+    }
 
-        boolean doDirty = true;
+    private static void read_entity_res(List<EntityProfile> topics, ArrayList<String> langs, List<EntityProfile> refs, List<EntityProfile> sums, Properties props){
+        ArrayList<String> topicids = new ArrayList<>();
+        String mode = props.getProperty("datamode");
+
+        if (mode.equals("mss")) {
+            try {
+                File infold = new File(props.getProperty("entities_mss"));
+                File[] infiles = infold.listFiles();
+                for (File f : infiles) {
+                    // read metadata from the filename
+                    String filename = f.getName();
+                    String[] parts = filename.split("_");
+                    String lang = parts[0];
+                    String topic_id = parts[1];
+                    String topic_name = parts[2];
+                    String category = parts[3];
+                    String id = parts[4];
+                    if (id.endsWith(".json.entities")) id = id.substring(0, id.length() - ".json.entities".length());
+                    if (!topicids.contains(topic_id)) {
+                        EntityProfile ep = new EntityProfile(topic_id);
+                        ep.addAttribute("topic_name", topic_name);
+                        ep.addAttribute("lang_code", lang);
+                        topicids.add(topic_id);
+                        topics.add(ep);
+                    }
+
+                    FileReader fr = new FileReader(f);
+                    //BufferedReader br = new BufferedReader(fr);
+                    //String content = "";
+                    //String line;
+                    //while((line = br.readLine()) != null) content += line;
+                    JsonReader rd = new Gson().newJsonReader(fr);
+                    JsonArray ar = new Gson().fromJson(rd, JsonArray.class);
+                    EntityProfile ep = jsonobj_to_entityprofile(id, ar);
+                    ep.addAttribute("topic_id", topic_id);
+
+                    // add the read entity to the appropriate collection
+                    if (category.equals("refs")) {
+                        refs.add(ep);
+                    } else if (category.equals("sums")) {
+                        sums.add(ep);
+                    } else {
+                        System.err.println("Unknown file category" + category);
+                        return;
+                    }
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                return;
+            }
+        }
+        else{
+            // read MMS entities
+            String refs_dir = props.getProperty("entities_mms");
+            String sources_dir = props.getProperty("entities_mms_sources");
+            try {
+                File infold = new File(refs_dir);
+                File[] infiles = infold.listFiles();
+                System.out.println(infiles.length + " files in " + refs_dir);
+                for (File f : infiles) {
+                    // read metadata from the filename
+                    String filename = f.getName();
+                    String[] parts = filename.split("_");
+                    String lang = parts[0];
+                    String topic_id = parts[1];
+                    String topic_name = parts[2];
+                    String category = parts[3];
+                    String id = parts[4];
+                    if (id.endsWith(".json.entities")) id = id.substring(0, id.length() - ".json.entities".length());
+                    if (!topicids.contains(topic_id)) {
+                        EntityProfile ep = new EntityProfile(topic_id);
+                        ep.addAttribute("topic_name", topic_name);
+                        ep.addAttribute("lang_code", lang);
+                        topicids.add(topic_id);
+                        topics.add(ep);
+                    }
+
+                    FileReader fr = new FileReader(f);
+                    //BufferedReader br = new BufferedReader(fr);
+                    //String content = "";
+                    //String line;
+                    //while((line = br.readLine()) != null) content += line;
+                    JsonReader rd = new Gson().newJsonReader(fr);
+                    JsonArray ar = new Gson().fromJson(rd, JsonArray.class);
+                    EntityProfile ep = jsonobj_to_entityprofile(id, ar);
+                    ep.addAttribute("topic_id", topic_id);
+
+                    // add the read entity to the appropriate collection
+                    if (!category.equals("refs")) {
+                        System.err.println("mms ref entity has invalid category" + category);
+                    }
+                    refs.add(ep);
+                }
+
+                System.out.println("Read " + refs.size() + " refs.");
+                // read source entities
+                infold = new File(sources_dir);
+                int filecounter = 0;
+                int topic_counter = 0;
+                int topic_interval = 10;
+                ArrayList<String> filenames = new ArrayList<>();
+                filenames.addAll(Arrays.asList(infold.list()));
+                System.out.println(filenames.size() + " files in " + sources_dir);
+                Collections.sort(filenames);
+                Collections.sort(topics, new Comparator<EntityProfile>() {
+                    @Override
+                    public int compare(EntityProfile entityProfile, EntityProfile t1) {
+                        String tname = getEntityValue(entityProfile, "topic_name");
+                        String tname2 = getEntityValue(t1, "topic_name");
+                        return tname.compareTo(tname2);
+                    }
+                });
+                for (String name : filenames) {
+                    // read metadata from the filename
+                    String[] parts = name.split("\\.");
+                    String id = parts[0];
+                    String lang = parts[1];
+                    // match the id to the ref id
+                    if (filecounter++ >= topic_interval){ ++ topic_counter; filecounter = 1;}
+                    String topic_id = topics.get(topic_counter).getEntityUrl();
+
+                    if (!topicids.contains(topic_id)) {
+                        EntityProfile ep = new EntityProfile(topic_id);
+                        String topic_name = get_topic_name(topic_id, topics);
+                        ep.addAttribute("topic_name", topic_name);
+                        ep.addAttribute("lang_code", lang);
+                        topicids.add(topic_id);
+                        topics.add(ep);
+                    }
+
+                    FileReader fr = new FileReader(new File(sources_dir + "/" + name));
+                    JsonReader rd = new Gson().newJsonReader(fr);
+                    JsonArray ar = new Gson().fromJson(rd, JsonArray.class);
+                    EntityProfile ep = jsonobj_to_entityprofile(id, ar);
+                    String topic_name = id;
+                    System.out.println(topic_id + " - " + topic_name);
+                    ep.addAttribute("topic_id", topic_id);
+                    ep.addAttribute("topic_name",topic_name);
+                    sums.add(ep);
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                return;
+            }
+            System.out.println("Read " + sums.size() + " sums.");
+
+        }
+    }
+
+    public static void main(String[] args){
+        double clustering_threshold = 0.1;
+        String datamode;
+        boolean doDirty;
+        boolean doEntityRes;
+        int max_topics;
+
         Properties props = new Properties();
         try {
             props.load(new FileReader("config.txt"));
             clustering_threshold = Double.parseDouble(props.getProperty("clustering_threshold"));
-            datamode =  props.getProperty("datamode");
+            datamode =  props.getProperty("datamode","mss");
             doDirty = Boolean.parseBoolean(props.getProperty("dirty"));
+            doEntityRes = Boolean.parseBoolean(props.getProperty("do_entity_res"));
+            max_topics = Integer.parseInt(props.getProperty("max_topics","-1"));
         } catch (IOException e) {
             e.printStackTrace();
             return;
         }
 
-        System.out.print("Running ER on " + datamode);
+        // print run info
+        String msg = "Running ER on " + datamode;
         if(doDirty)
-            System.out.println(" dirty ");
+            msg += (" dirty ");
         else
-            System.out.println(" clean ");
-        boolean do_mss = datamode.equals("mss");
-        boolean do_mms = datamode.equals("mms");
+            msg += (" clean ");
+        if(doEntityRes)
+            msg += (" entityRes ");
+        System.out.println(msg);
 
-        //String useRefsWith = "sources";
+
+        // restrict languages
         ArrayList<String> langs = new ArrayList<>();
         langs.add("en");
+
         // topic_id, topic_name --> <ref1, ref2,...><sum1,sum2,...>
         List<EntityProfile> sums_raw =new ArrayList<>();
         List<EntityProfile> refs_raw =new ArrayList<>();
         List<EntityProfile> topics =new ArrayList<>();
         GroundTruth ground_truth = null;
+        boolean do_mms = datamode.equals("mms");
 
-        if(do_mms) {
-            String source_folder = props.getProperty("source_folder");
-
-            read_mms(topics, refs_raw, sums_raw, source_folder, langs);
+        if(! doEntityRes) {
+            // run without entity recognition
+            if (do_mms) {
+                read_mms(topics, refs_raw, sums_raw, props, langs);
+            } else {
+                // for mss, read participant and reference summaries
+                read_mss(topics, refs_raw, sums_raw);
+            }
         }
-        else{
-            // read participant summaries
-            read_mss(topics, refs_raw, sums_raw, ground_truth, langs);
+        else {
+            // for entity recognition run, read the recognized entities
+            String source_folder = props.getProperty("entity_source_folder");
+            read_entity_res(topics, langs, refs_raw, sums_raw, props);
         }
 
+        if(refs_raw.isEmpty()) return;
         List<EntityProfile> topics_for_lang=new ArrayList<>();
+
+        System.out.println(String.format("Read %d reference and %d non-reference instances.", refs_raw.size(), sums_raw.size()));
+
 
         // filter data
         // ----------------
         if(! langs.isEmpty()){
+            System.out.println("Limiting to languages:" + langs);
             for(EntityProfile top : topics) {
                 if (langs.contains(getEntityValue(top, "lang_code"))) topics_for_lang.add(top);
             }
         }
-        if(max_topics > 0)while(topics_for_lang.size() > max_topics) topics_for_lang.remove(0);
-        ground_truth = new GroundTruth(topics_for_lang);
+        if(max_topics > 0){
+            System.out.println("Limiting to " + max_topics + " topics.");
+            while(topics_for_lang.size() > max_topics) topics_for_lang.remove(0);
+        }
+        ground_truth = new GroundTruth(topics_for_lang, doEntityRes, doDirty);
 
-        // restrict refs to topics
+        // restrict to topics
         for(EntityProfile p : refs_raw){
             ground_truth.add_ref(p);
         }
@@ -270,27 +458,31 @@ public class test_multiling {
 
         //ground_truth.print_refs();
         //ground_truth.print_sums();
-
         // end of filter data
+
+        // extract similarities
         StandardBlocking bl = new StandardBlocking();
         AbstractEntityMatching pm = null;
         SimilarityPairs sp;
-
         if (doDirty){
             ground_truth.make_aggregate();
             List<EntityProfile> aggregate = ground_truth.get_aggregate();
             System.out.println("Clustering a total of " + aggregate.size() + " aggregate summaries");
             List<AbstractBlock> blocks =  bl.getBlocks(aggregate);
+            refine_blocks(blocks);
             pm = getMatcher(props);
             sp = pm.executeComparisons(blocks, aggregate);
+            ground_truth.print_aggregate();
         }
         else{
             System.out.println("Clustering " + ground_truth.get_refs().size() + " refs and " + ground_truth.get_sums().size() + " non-ref sums.");
             List<AbstractBlock> blocks =  bl.getBlocks(ground_truth.get_refs(), ground_truth.get_sums());
+            refine_blocks(blocks);
             pm = getMatcher(props);
             sp = pm.executeComparisons(blocks, ground_truth.get_refs(), ground_truth.get_sums());
+            ground_truth.print_refs();
+            ground_truth.print_sums();
         }
-        // try with a single list
 
         double maxSim = -1;
         double minSim = 2;
@@ -299,10 +491,11 @@ public class test_multiling {
             if (sim > maxSim) maxSim = sim;
         }
         System.out.println("max sim:" + maxSim + " - min sim:" + minSim);
-        AbstractEntityClustering cl = getClusterer(props);
-        cl = new ConnectedComponentsClustering();
+
+        // clustering
+        AbstractEntityClustering cl;
+        cl = getClusterer(props);
         cl.setSimilarityThreshold(clustering_threshold);
-        //CenterClustering cl = new CenterClustering(clustering_threshold);
         System.out.println("Clustering with a threshold of " + clustering_threshold);
         List<EquivalenceCluster> clusters_raw = cl.getDuplicates(sp);
         if(clusters_raw.isEmpty()){
@@ -315,7 +508,7 @@ public class test_multiling {
         int n_clust = 0;
         List<EquivalenceCluster> clusters= new ArrayList<>();
         if(!doDirty) {
-
+            System.out.println("Processing clusters on non-dirty ER");
             for (EquivalenceCluster c : clusters_raw) {
                 System.out.println(count++ + "/" + clusters_raw.size() +
                         " | D1 size:" + c.getEntityIdsD1().size() +
@@ -336,28 +529,27 @@ public class test_multiling {
             }
         }
         else {
-            int ccount = 0;
+            System.out.println("Processing clusters on dirty ER");
+            int cluster_count = 0;
             for(EquivalenceCluster c : clusters_raw) {
-                ccount++;
+                cluster_count++;
                 if (c.getEntityIdsD1().size() == ground_truth.get_aggregate().size()) {
-                    System.out.println("Discarding degenerate all inclusive cluster #" + ccount);
+                    System.out.println("Discarding degenerate all inclusive cluster #" + cluster_count + " / " + clusters_raw.size());
                     continue;
                 }
                 if (c.getEntityIdsD1().size() == 1) {
-                    System.out.println("Discarding degenerate unit cluster #" + ccount);
+                    System.out.println("Discarding degenerate unit cluster #" +cluster_count + " / " + clusters_raw.size());
                     continue;
                 }
-
                 ground_truth.add_cluster(c.getEntityIdsD1(), c.getEntityIdsD2());
+                n_clust ++;
             }
         }
-
-
         ArrayList<Double> res = ground_truth.evaluate(doDirty);
-
         if (max_topics > 0){
             System.err.println("============\nMax topics is set to " + max_topics);
         }
+
         // machine readable output
         System.out.println();
         System.out.println("clust. threshold:" + clustering_threshold + " num. clusters " + n_clust);
@@ -410,6 +602,7 @@ public class test_multiling {
 
     static AbstractEntityClustering getClusterer(Properties props){
         String clusterer = props.getProperty("clusterer");
+        System.out.println("Using clusterer:" + clusterer);
         double thresh = Double.parseDouble(props.getProperty("clustering_threshold"));
         if(clusterer.equals("center")) return new CenterClustering(thresh);
         if(clusterer.equals("connected")) return new ConnectedComponentsClustering(thresh);
@@ -417,10 +610,17 @@ public class test_multiling {
     }
     static AbstractEntityMatching getMatcher(Properties props){
         String matcher = props.getProperty("matcher");
+        System.out.println("Using entity matcher:" + matcher);
         if(matcher.equals("profilematcher"))
             return new ProfileMatcher(RepresentationModel.CHARACTER_FOURGRAM_GRAPHS, SimilarityMetric.GRAPH_VALUE_SIMILARITY);
         else if(matcher.equals("grouplinkage"))
             return new GroupLinkage();
         return null;
+    }
+    static void refine_blocks(List<AbstractBlock> blocks){
+        ComparisonPropagation cp = new ComparisonPropagation();
+        int num_b = blocks.size();
+        blocks.addAll(cp.refineBlocks(blocks));
+        for(int i=0;i<num_b;++i)blocks.remove(0);
     }
 }

@@ -10,82 +10,55 @@ public class GroundTruth {
     List<EntityProfile> sums;
     HashMap<List<EntityProfile>, List<EntityProfile>> clusters;
 
-    public List<EntityProfile> get_topics() {
-        return topics;
-    }
-
     List<String> sumtype;
-    void make_aggregate(){
+    List<EntityProfile> aggregate;
 
+    void make_aggregate(){
         List<EntityProfile> llist = new ArrayList<>();
         sumtype = new ArrayList<>();
         for(EntityProfile p : refs) { sumtype.add("ref"); llist.add(p); }
         for(EntityProfile p : sums) { sumtype.add("sum"); llist.add(p); }
-        System.out.println("RESTRICTING TO 3");
-        while(llist.size() > 3)llist.remove(llist.size()-1);
-        refs = llist;
+        aggregate = llist;
     }
     List<EntityProfile> get_aggregate(){
-        List<EntityProfile> llist = new ArrayList<>();
-        int rcount = 0;
-        int scount = 0;
-        int count = 0;
-        System.out.println();
-        for(EntityProfile p : refs){
-            EntityProfile pp = new EntityProfile(p.getEntityUrl());
-            String summ = test_multiling.getEntityValue(p, "summary").substring(0,100).replaceAll("\\n", "");
-            summ = summ.substring(0,64);
-            pp.addAttribute("summary", summ);
-            //if(sumtype.get(count++).equals("ref"))
-            //    pp.addAttribute("summary", "reference summary 12312 623497 )(&) 01!@#$%^&*(((()_+|" + scount++);
-            //else
-            //    pp.addAttribute("summary", "regular summary " + rcount++);
-
-            System.out.println("ent-url: " + pp.getEntityUrl() + " summary: {" + test_multiling.getEntityValue(pp,"summary") + "}");
-            llist.add(pp);
-        }
-        System.out.println();
-        return llist;
+        if (this.aggregate.isEmpty()) return this.aggregate;
+        make_aggregate();
+        return aggregate;
+    }
+    EntityProfile handle_entityprofile(EntityProfile prof){
+        if(this.erData) return prof;
+        EntityProfile pp = new EntityProfile(prof.getEntityUrl());
+        String summ = test_multiling.getEntityValue(prof, "summary");
+        pp.addAttribute("summary", summ);
+        return pp;
     }
 
     public List<EntityProfile> get_sums() {
         // keep only summary texts
         List<EntityProfile> s = new ArrayList<>();
-        for(EntityProfile p : sums){
-            EntityProfile pp = new EntityProfile(p.getEntityUrl());
-            String summ = test_multiling.getEntityValue(p, "summary").substring(0,100).replaceAll("\\n", "");
-            //pp.addAttribute("summary", summ);
-            pp.addAttribute("summary", "regular summary "+s.size());
-            System.out.println("ent-url: " + pp.getEntityUrl() + " summary: {" + test_multiling.getEntityValue(pp,"summary") + "}");
-            s.add(pp);
-        }
+        for(EntityProfile p : sums) s.add(handle_entityprofile(p));
         return s;
     }
     public List<EntityProfile> get_refs() {
         // keep only summary texts
         List<EntityProfile> s = new ArrayList<>();
-        for(EntityProfile p : refs){
-            EntityProfile pp = new EntityProfile(p.getEntityUrl());
-            String summ = test_multiling.getEntityValue(p, "summary").substring(0,100).replaceAll("\\n", "") ;
-            //pp.addAttribute("summary", summ);
-            pp.addAttribute("summary", "Reference summary "+s.size());
-            System.out.println("ent-url: " + pp.getEntityUrl() + " summary: {" + test_multiling.getEntityValue(pp,"summary") + "}");
-            s.add(pp);
-        }
+        for(EntityProfile p : refs) s.add(handle_entityprofile(p));
         return s;
     }
 
-
-    boolean do_mss;
-    boolean do_mms;
+    boolean erData;
+    boolean do_dirty;
     HashMap<String, Pair<ArrayList<String>, ArrayList<String>>> gt ;
 
-    public GroundTruth(List<EntityProfile> top){
+    public GroundTruth(List<EntityProfile> top, boolean erData, boolean do_dirty){
         this.topics = top;
         this.refs = new ArrayList<>();
         this.sums = new ArrayList<>();
         this.clusters = new HashMap<>();
         this.gt = new HashMap<>();
+        this.erData = erData;
+        this.aggregate = new ArrayList<>();
+        this.do_dirty = do_dirty;
     }
     public String getName(EntityProfile top){
         return test_multiling.getEntityValue(top, "topic_name");
@@ -125,21 +98,22 @@ public class GroundTruth {
             clusters.put(refids_to_profiles(ids1), sumids_to_profiles(ids2));
     }
 
-    void print_sums(){
-        for(EntityProfile p : sums){
-            System.out.println("ent-url: " + p.getEntityUrl() +
-                    " topic-name: " + test_multiling.getEntityValue(p,"topic_name") +
-                    " topic-id: " + test_multiling.getEntityValue(p,"topic_id")  +
-                    " {" + test_multiling.getEntityValue(p, "summary").substring(0,100).replaceAll("\\n"," ") + " ...}");
-        }
-    }
     void print_refs(){
-        for(EntityProfile p : refs){
-            System.out.println("ent-url: " + p.getEntityUrl() +
-                    " topic-name: " + test_multiling.getEntityValue(p,"topic_name") +
-                    " topic-id: " + test_multiling.getEntityValue(p,"topic_id")  +
-                    " {" + test_multiling.getEntityValue(p, "summary").substring(0,100).replaceAll("\\n"," ") + " ...}");
-        }
+        for(EntityProfile p : refs) print_ent(p);
+    }
+    void print_sums(){
+        for(EntityProfile p : sums) print_ent(p);
+    }
+    void print_ent(EntityProfile p){
+        System.out.print("ent-url: " + p.getEntityUrl() +
+                " topic-name: " + test_multiling.getEntityValue(p,"topic_name") +
+                " topic-id: " + test_multiling.getEntityValue(p,"topic_id"));
+        if(!erData) System.out.println(" {" + test_multiling.getEntityValue(p, "summary").substring(0,100).replaceAll("\\n"," ") + " ...}");
+        else System.out.println();
+
+    }
+    void print_aggregate(){
+        for(EntityProfile p : aggregate) print_ent(p);
     }
 
     public ArrayList<Double> evaluate_dirty() {
@@ -159,7 +133,9 @@ public class GroundTruth {
             // measure total cluster prec/rec/F-Measure and per group (i.e. ref and sums)
             // wrt to the maj. voted topic in the cluster
             String cluster_reftopic = clustertopics.get(0).f1;
-            num_truePos += clustertopics.get(0).f2;
+            int cluster_reftopic_num = clustertopics.get(0).f2;
+
+            num_truePos += cluster_reftopic_num;
             for(int i=1;i<clustertopics.size();++i){
                 Pair<String,Integer> ppair = clustertopics.get(i);
                 String topic = ppair.f1;
@@ -174,22 +150,25 @@ public class GroundTruth {
             }
 
             // get total positives for the cluster to compute recall
-            int total_positives = get_total_topic_members(cluster_reftopic, refs);
+            ArrayList<EntityProfile> actual_topic_members = get_total_topic_members(cluster_reftopic, aggregate);
 
             double precision = (1.0 * num_truePos) / (num_truePos + num_falsePos);
-            double recall = (1.0 * num_truePos) / total_positives;
+            double recall = (1.0 * num_truePos) / actual_topic_members.size();
             total_precision += precision;
             total_recall += recall;
 
-            System.out.print("\nCluster " + ++cluster_count + " topic: [" + cluster_reftopic + "] ");
+            System.out.print("\nCluster " + ++cluster_count + "/" +clusters.size() + " topic: [" + cluster_reftopic + "] from " + cluster_reftopic_num + " members. Hist. of all are:");
             for(Pair<String, Integer> p : clustertopics) System.out.print("("+p.f1 + ", " + p.f2+") ");
-            System.out.print("\n\tmembers: { ");
-            for(EntityProfile r : refsums){ System.out.print(r.getEntityUrl() + " ");} System.out.println("}");
+            System.out.print("\n\tcluster members ent.urls/topics: { ");
+            for(EntityProfile r : refsums){ System.out.print(r.short_str() + " ");} System.out.println("}");
+            System.out.print("\ttrue members of topic " + cluster_reftopic + " [num=" + actual_topic_members.size() + "] are :{");
+            for(EntityProfile r : actual_topic_members){ System.out.print(r.short_str() + " ");} System.out.println("}");
+
             System.out.println(String.format("\tPrecision: %f", precision));
 
             System.out.println(String.format("\tRecall: %f ",recall));
             if(! false_members.isEmpty())
-                System.out.println("\tfalse members " + false_members);
+                System.out.println("\tfalse members {" + false_members + "}");
         }
 
         if(!clusters.isEmpty()) {
@@ -235,7 +214,8 @@ public class GroundTruth {
             // measure total cluster prec/rec/F-Measure and per group (i.e. ref and sums)
             // wrt to the maj. voted topic in the cluster
             String cluster_reftopic = reftopics.get(0).f1;
-            num_ref_truePos += reftopics.get(0).f2;
+            int cluster_reftopic_num = reftopics.get(0).f2;
+            num_ref_truePos += cluster_reftopic_num;
             for(int i=1;i<reftopics.size();++i){
                 Pair<String,Integer> ppair = reftopics.get(i);
                 String topic = ppair.f1;
@@ -261,26 +241,30 @@ public class GroundTruth {
                 }
             }
             // get total positives for the cluster to compute recall
-            int total_ref_positives = get_total_topic_members(cluster_reftopic, refs);
-            int total_sum_positives = get_total_topic_members(cluster_reftopic, sums);
+            ArrayList<EntityProfile> actual_ref_topic_members = get_total_topic_members(cluster_reftopic, refs);
+            ArrayList<EntityProfile> actual_sum_topic_members = get_total_topic_members(cluster_reftopic, sums);
             double ref_precision = (1.0 * num_ref_truePos) / (num_ref_truePos + num_ref_falsePos);
-            double ref_recall = (1.0 * num_ref_truePos) / total_ref_positives;
+            double ref_recall = (1.0 * num_ref_truePos) / actual_ref_topic_members.size();
             total_ref_prec += ref_precision;
             total_ref_rec += ref_recall;
             double sum_precision = (1.0 * num_sum_truePos) / (num_sum_truePos + num_sum_falsePos);
-            double sum_recall = (1.0 * num_sum_truePos) / total_sum_positives;
+            double sum_recall = (1.0 * num_sum_truePos) / actual_sum_topic_members.size();
             total_sum_prec += sum_precision;
             total_sum_rec += sum_recall;
 
             double precision = (ref_precision + sum_precision) /2.0;
             double recall = (ref_recall + sum_recall) /2.0;
 
-            System.out.println("\nCluster " + ++cluster_count + " topic: [" + cluster_reftopic + "]");
-            System.out.print("\trefs: { ");
-            for(EntityProfile r : refsums){ System.out.print(r.getEntityUrl() + " ");} System.out.println("}");
-            System.out.println(String.format("\tPrecision (ref/sum/total): %f %f %f", ref_precision, sum_precision, precision));
+            System.out.print("\nCluster " + ++cluster_count + "/" + clusters.size() + " topic: [" + cluster_reftopic
+                    + "] from " + cluster_reftopic_num + " members. Hist. of all are:");
+            for(Pair<String, Integer> p : reftopics) System.out.print("("+p.f1 + ", " + p.f2+") ");
+
+            System.out.print("\n\trefs: { ");
+            for(EntityProfile r : refsums){ System.out.print(r.short_str() + " ");} System.out.println("}");
             System.out.print("\tsums: { ");
-            for(EntityProfile s : sumsums){ System.out.print(s.getEntityUrl() + " ");} System.out.println("}");
+            for(EntityProfile s : sumsums){ System.out.print(s.short_str() + " ");} System.out.println("}");
+
+            System.out.println(String.format("\tPrecision (ref/sum/total): %f %f %f", ref_precision, sum_precision, precision));
             System.out.println(String.format("\tRecall (ref/sum/total): %f %f %f", ref_recall,sum_recall, recall));
             if(! false_refs.isEmpty())
                 System.out.println("\tfalse refs " + false_refs);
@@ -307,12 +291,12 @@ public class GroundTruth {
         return res;
     }
 
-    int get_total_topic_members(String topic_id, List<EntityProfile> eplist){
-        int num = 0;
+    public ArrayList<EntityProfile> get_total_topic_members(String topic_id, List<EntityProfile> eplist){
+        ArrayList<EntityProfile> res = new ArrayList<>();
         for(EntityProfile r : eplist){
-           if(test_multiling.getEntityValue(r, "topic_id").equals(topic_id)) num ++;
+           if(test_multiling.getEntityValue(r, "topic_id").equals(topic_id)) res.add(r);
         }
-        return num;
+        return res;
     }
 
     public List<EntityProfile> sumids_to_profiles(List<Integer> ids){
@@ -322,10 +306,14 @@ public class GroundTruth {
         }
         return plist;
     }
+    
     public List<EntityProfile> refids_to_profiles(List<Integer> ids){
         List<EntityProfile> plist = new ArrayList<>();
         for(int id : ids){
-            plist.add(refs.get(id));
+            if(do_dirty)
+                plist.add(aggregate.get(id));
+            else
+                plist.add(refs.get(id));
         }
         return plist;
     }

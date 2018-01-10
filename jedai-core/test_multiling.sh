@@ -1,12 +1,12 @@
-echo "$(find . -iname '*.jar' | tr '\n' ':')" > cpath 
-echo "$(find ~/.m2/ -iname '*.jar' | tr '\n' ':')" >> cpath 
+mvn clean package || exit 1
+
 
 # loop on the sim. threshold
 
 for thresh in $(seq 0 0.05 1 | sed 's/,/./g'); do
-	echo "Running experiment with sim.thresh at $thresh"
-	echo "clustering_threshold = $thresh" > config.txt
-	java -cp "$(cat cpath)" test_multiling.test_multiling | tail -1  >> res.txt
+	sed  -i "s/clustering_threshold.*/clustering_threshold = $thresh /g"  config.txt
+	echo "Running experiment with sim.thresh at $thresh ..."
+	./execute.sh | tail -1  >> res.txt
 	tail res.txt
 done
 

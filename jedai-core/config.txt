@@ -1,6 +1,17 @@
-clustering_threshold = 0.9
+clustering_threshold = 0.00
 datamode = mms
-dirty = true
-source_folder = /home/nik/work/iit/entity-linking/multilingSources/SourceTextsV2b/
+dirty = false
+
+# mms sources
+mms_sources_folder = /home/nik/work/iit/entity-linking/multilingSources/SourceTextsV2b/
+
+# entities folders
+do_entity_res = true
+entities_mms = /home/nik/work/iit/entity-linking/parsed_entities/mms
+entities_mms_sources = /home/nik/work/iit/entity-linking/parsed_entities/mms_sources
+entities_mss = /home/nik/work/iit/entity-linking/parsed_entities/mss
+
 matcher = profilematcher
 clusterer = center
+
+max_topics = 5

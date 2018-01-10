@@ -52,10 +52,11 @@ public class ConnectedComponentsClustering extends AbstractEntityClustering {
         while (iterator.hasNext()) {
             count++;
             Comparison comparison = iterator.next();
-            System.out.println("IDs : " + comparison.getEntityId1() + " , " + comparison.getEntityId2() + " sim: " + comparison.getUtilityMeasure());
+            //System.out.println("IDs : " + comparison.getEntityId1() + " , " + comparison.getEntityId2() + " sim: " + comparison.getUtilityMeasure());
             if (threshold < comparison.getUtilityMeasure()) {
-                System.out.println("Adding edge # " + count);
+                //System.out.println("Adding edge # " + count);
                 similarityGraph.addEdge(comparison.getEntityId1(), comparison.getEntityId2() + datasetLimit);
+
             }
         }
 

@@ -63,4 +63,8 @@ public class EntityProfile implements Serializable {
 
         return str;
     }
+    public String short_str(){
+        String str = "(" + this.getEntityUrl() +", "+ test_multiling.test_multiling.getEntityValue(this,"topic_id") + ")";
+        return str;
+    }
 }
