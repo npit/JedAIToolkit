@@ -55,10 +55,8 @@ public enum SimilarityMetric {
             case TOKEN_BIGRAMS_TF_IDF:
             case TOKEN_TRIGRAMS_TF_IDF:
             case TOKEN_UNIGRAMS_TF_IDF:
-                simMetrics.add(ARCS_SIMILARITY);
+            case PRETRAINED_EMBEDDINGS:
                 simMetrics.add(COSINE_SIMILARITY);
-                simMetrics.add(GENERALIZED_JACCARD_SIMILARITY);
-                simMetrics.add(SIGMA_SIMILARITY);
                 break;
             case CHARACTER_BIGRAM_GRAPHS:
             case CHARACTER_FOURGRAM_GRAPHS:
@@ -71,6 +69,7 @@ public enum SimilarityMetric {
                 simMetrics.add(GRAPH_OVERALL_SIMILARITY);
                 simMetrics.add(GRAPH_VALUE_SIMILARITY);
                 break;
+
             default:
                 return null;
         }
