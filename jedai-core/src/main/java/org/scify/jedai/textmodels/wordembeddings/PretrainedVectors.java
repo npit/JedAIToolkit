@@ -1,6 +1,7 @@
 package org.scify.jedai.textmodels.wordembeddings;
 
 import com.esotericsoftware.minlog.Log;
+import com.opencsv.CSVParser;
 import com.opencsv.CSVReader;
 import org.scify.jedai.textmodels.ITextModel;
 import org.scify.jedai.utilities.enumerations.RepresentationModel;
@@ -10,13 +11,34 @@ import java.io.*;
 import java.util.*;
 
 /*
+  Class to load and handle pretrained word vectors.
+  Embeddings file should be place in the file:
+  <sources_dir>/JedAIToolkit/jedai-core/src/main/resources/embeddings/weights.txt
+
+  Expected file format is:
+  <dimension>,<separator>
+  word1<separator>value1<separator>value2....
+  .....
+
+  e.g.
+  4 ,
+  town,2.1,4.0,6.22,8.9
+  car,8.0,7.11,6.41,4.44
+  .....
+
+  Examples of word embeddings that can be used (conversion to the above format may be required):
+  Word2Vec (Mikolov, 2013): https://code.google.com/archive/p/word2vec/
+  Glove (Pennington, 2014): https://nlp.stanford.edu/projects/glove/ 
+  FastText (Joulin, 2017): https://fasttext.cc/
+  Global context embeddings (Huang, 2012) https://www.socher.org/index.php/Main/ImprovingWordRepresentationsViaGlobalContextAndMultipleWordPrototypes
+  e.t.c.
 
  */
 
 
 public class PretrainedVectors extends VectorSpaceModel{
 
-    final char dataSeparator = ' ';
+    char dataSeparator;
     static Double[] unkownWordVector;
     static boolean weightsLoaded = false;
     static Map<String, Double[]> wordMap;
@@ -40,21 +62,25 @@ public class PretrainedVectors extends VectorSpaceModel{
        if (weightsLoaded) return;
        Log.info("Loading weights.");
        ClassLoader classLoader = getClass().getClassLoader();
+       //String fileName = classLoader.getResource("embeddings/weights-full.txt").getFile();
        String fileName = classLoader.getResource("embeddings/weights.txt").getFile();
        wordMap = new HashMap<>();
 
        try {
-           CSVReader reader = new CSVReader(new FileReader(fileName), dataSeparator);
-           List<String[]> vectors = reader.readAll();
-           // first read dimension
-           String[] header = vectors.get(0)[0].trim().split(Character.toString(dataSeparator));
+           BufferedReader br = new BufferedReader(new FileReader(fileName));
+           // first read parsing metadata, split by commas
+           String [] header = br.readLine().split(",");
            try {
                dimension = Integer.parseInt(header[0]);
+               dataSeparator = header[1].charAt(0);
            }catch (NumberFormatException ex){
                Log.error("Pretrained header malformed -- expected:<dimension>");
                System.exit(-1);
            }
+           Log.info(String.format("Read dimension: [%d], delimiter: [%c]", dimension, dataSeparator));
 
+           CSVReader reader = new CSVReader(new FileReader(fileName), dataSeparator, CSVParser.DEFAULT_QUOTE_CHARACTER, 1);
+           List<String[]> vectors = reader.readAll();
            for (int s=1; s<vectors.size(); ++s){
                String [] components = vectors.get(s);
                if (components.length != dimension + 1)
