@@ -55,7 +55,8 @@ public enum SimilarityMetric {
             case TOKEN_BIGRAMS_TF_IDF:
             case TOKEN_TRIGRAMS_TF_IDF:
             case TOKEN_UNIGRAMS_TF_IDF:
-            case PRETRAINED_EMBEDDINGS:
+            case PRETRAINED_WORD_EMBEDDINGS:
+            case PRETRAINED_CHARACTER_EMBEDDINGS:
                 simMetrics.add(COSINE_SIMILARITY);
                 break;
             case CHARACTER_BIGRAM_GRAPHS:

@@ -22,7 +22,8 @@ import org.scify.jedai.textmodels.ITextModel;
 import org.scify.jedai.textmodels.TokenNGramGraphs;
 import org.scify.jedai.textmodels.TokenNGrams;
 import org.scify.jedai.textmodels.TokenNGramsWithGlobalWeights;
-import org.scify.jedai.textmodels.wordembeddings.PretrainedVectors;
+import org.scify.jedai.textmodels.embeddings.PretrainedCharacterVectors;
+import org.scify.jedai.textmodels.embeddings.PretrainedWordVectors;
 
 /**
  *
@@ -47,7 +48,8 @@ public enum RepresentationModel {
     TOKEN_TRIGRAMS,
     TOKEN_TRIGRAMS_TF_IDF,
     TOKEN_TRIGRAM_GRAPHS,
-    PRETRAINED_EMBEDDINGS;
+    PRETRAINED_WORD_EMBEDDINGS,
+    PRETRAINED_CHARACTER_EMBEDDINGS;
 
     public static ITextModel getModel(int dId, RepresentationModel model, SimilarityMetric simMetric, String instanceName) {
         switch (model) {
@@ -87,8 +89,10 @@ public enum RepresentationModel {
                 return new TokenNGramsWithGlobalWeights(dId, 1, model, simMetric, instanceName);
             case TOKEN_UNIGRAM_GRAPHS:
                 return new TokenNGramGraphs(dId, 1, model, simMetric, instanceName);
-            case PRETRAINED_EMBEDDINGS:
-                return new PretrainedVectors(dId, 0, model, simMetric, instanceName);
+            case PRETRAINED_CHARACTER_EMBEDDINGS:
+                return new PretrainedCharacterVectors(dId, 0, model, simMetric, instanceName);
+            case PRETRAINED_WORD_EMBEDDINGS:
+                return new PretrainedWordVectors(dId, 0, model, simMetric, instanceName);
             default:
                 return null;
         }

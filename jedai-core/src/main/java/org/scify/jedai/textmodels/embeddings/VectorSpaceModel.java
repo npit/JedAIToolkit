@@ -1,4 +1,4 @@
-package org.scify.jedai.textmodels.wordembeddings;
+package org.scify.jedai.textmodels.embeddings;
 
 import org.scify.jedai.textmodels.AbstractModel;
 import org.scify.jedai.textmodels.ITextModel;

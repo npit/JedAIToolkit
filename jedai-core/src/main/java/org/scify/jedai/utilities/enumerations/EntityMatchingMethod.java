@@ -34,7 +34,9 @@ public enum EntityMatchingMethod {
                 return new GroupLinkage();
             case PROFILE_MATCHER:
                 return new ProfileMatcher();
-                // return new ProfileMatcher(RepresentationModel.PRETRAINED_EMBEDDINGS, SimilarityMetric.COSINE_SIMILARITY);
+                //return new ProfileMatcher(RepresentationModel.LDA_TOPIC_MODEL, SimilarityMetric.COSINE_SIMILARITY);
+                // return new ProfileMatcher(RepresentationModel.PRETRAINED_WORD_EMBEDDINGS, SimilarityMetric.COSINE_SIMILARITY);
+                // return new ProfileMatcher(RepresentationModel.PRETRAINED_CHARACTER_EMBEDDINGS, SimilarityMetric.COSINE_SIMILARITY);
             default:
                 return new ProfileMatcher();
         }
